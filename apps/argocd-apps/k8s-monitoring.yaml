@@ -8,7 +8,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/d-blanco/k8s-argo-monitoring.git  # Replace with your fork
+    repoURL: https://github.com/yousifalassaly/Capstone-Project.git  # Replace with your fork
     targetRevision: HEAD
     path: apps/k8s-monitoring
     helm:

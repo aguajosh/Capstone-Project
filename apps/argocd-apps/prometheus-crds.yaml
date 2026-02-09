@@ -10,7 +10,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/d-blanco/k8s-argo-monitoring.git
+    repoURL: https://github.com/yousifalassaly/Capstone-Project.git
     targetRevision: HEAD
     path: apps/prometheus-crds
     helm:

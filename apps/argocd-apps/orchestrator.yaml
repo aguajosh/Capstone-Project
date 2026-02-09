@@ -9,7 +9,7 @@ spec:
   project: default
   source:
     # Adjust repoURL to point to your fork of this repository
-    repoURL: https://github.com/aguajosh/Capstone-Project.git
+    repoURL: https://github.com/yousifalassaly/Capstone-Project.git
     targetRevision: HEAD
     path: apps/orchestrator
   destination:
