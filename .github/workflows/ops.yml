@@ -33,4 +33,4 @@ jobs:
           context: ./apps/orchestrator
           file: ./apps/orchestrator/Dockerfile
           push: true
-          tags: docker.io/${{ secrets.REGISTRY_USER }}/PlatformAPI
+          tags: docker.io/${{ secrets.REGISTRY_USER }}/platformapi:latest
