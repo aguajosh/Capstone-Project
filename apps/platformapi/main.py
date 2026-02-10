@@ -17,29 +17,6 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 INVENTORY_FILE = BASE_DIR / "ansible" / "inventory.yml"
 
 
-def load_inventory_hosts() -> List[str]:
-    """Extract IPv4 host addresses from the static inventory.yml.
-
-    This avoids adding a YAML dependency by using a simple regex to find
-    host keys (e.g. '54.177.24.138:') under the inventory file.
-    """
-    hosts = []
-    if not INVENTORY_FILE.exists():
-        return hosts
-    text = INVENTORY_FILE.read_text()
-    # find lines where an IPv4 address appears as a key followed by ':'
-    candidates = re.findall(r"^\s*([0-9]{1,3}(?:\.[0-9]{1,3}){3})\s*:", text, re.MULTILINE)
-    # Basic validation and dedupe
-    for c in candidates:
-        if is_valid_ipv4(c) and c not in hosts:
-            hosts.append(c)
-    return hosts
-
-
-# Load default targets from inventory (fall back to empty list)
-DEFAULT_TARGETS: List[str] = load_inventory_hosts()
-
-
 def is_valid_ipv4(addr: str) -> bool:
     # Basic IPv4 validation
     if not isinstance(addr, str):
@@ -125,7 +102,6 @@ async def app_home(request: Request) -> HTMLResponse:
             "title": "Platform API",
             "health_url": request.url_for("health"),
             "endpoints": ["/", "/login", "/health"],
-            "targets": DEFAULT_TARGETS,
         },
     )
 
