@@ -20,6 +20,16 @@ prometheus:
     service:
       type: LoadBalancer
 
+  # Provide custom configuration for Prometheus server linux EC2 nodes
+    serverFiles:
+      prometheus.yml:
+        scrape_configs:
+          - job_name: "linux-nodes"
+            static_configs:
+              - targets:
+                  - 18.144.29.14:9100
+                  - 50.18.130.21:9100
+
     # Enable remote write receiver for Alloy/Tempo
     extraFlags:
       - "web.enable-remote-write-receiver"
@@ -36,3 +46,4 @@ prometheus:
       limits:
         cpu: 500m
         memory: 1Gi
+

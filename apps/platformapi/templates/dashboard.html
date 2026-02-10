@@ -7,10 +7,13 @@ body, html { margin:0; padding:0; font-family:system-ui, -apple-system, BlinkMac
 h1 { margin-top:0 }
 .card { padding:12px; background:rgba(255,255,255,0.02); border-radius:8px; margin-bottom:12px }
 .code { background:#071027; padding:10px; border-radius:6px; font-family:monospace }
+button { cursor:pointer; padding:8px 12px; border-radius:6px; border:0; background:#1b3a7a; color:#e6eef8 }
+button:disabled { opacity:.6; cursor:not-allowed }
 </style>
 
 <div class="container">
   <h1>{{ title or 'Platform API' }}</h1>
+
   <div class="card">
     <h3>Health</h3>
     <p>Check service health: <a href="{{ health_url }}">{{ health_url }}</a></p>
@@ -26,56 +29,77 @@ h1 { margin-top:0 }
   </div>
 
   <div class="card">
-   <h3>Ansible — Ping Targets</h3>
-  <!-- Targets hidden temporarily to prevent container crashes -->
-   <button id="run-ansible">Run Ansible Ping</button>
-   <pre id="ansible-output"
-    style="white-space:pre-wrap; margin-top:12px; background:#071027; padding:12px; border-radius:6px; color:#cfe7ff"></pre>
+    <h3>Ansible — Ping Targets</h3>
+    <button id="run-ansible">Run Ansible Ping</button>
+    <pre id="ansible-output"
+      style="white-space:pre-wrap; margin-top:12px; background:#071027; padding:12px; border-radius:6px; color:#cfe7ff"></pre>
   </div>
-  
+
   <script>
-   const runBtn = document.getElementById('run-ansible');
-   const out = document.getElementById('ansible-output');
-  // Targets are hidden for now; use an empty default list
-  const defaultHosts = [];
+    const runBtn = document.getElementById('run-ansible');
+    const out = document.getElementById('ansible-output');
 
-   runBtn.addEventListener('click', async () => {
-    out.textContent = 'Running ansible ping...';
-    try {
-     const resp = await fetch('/ansible/ping', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hosts: defaultHosts })
-     });
-     const data = await resp.json();
+    // If you want the API to use its own DEFAULT_TARGETS / inventory.yml,
+    // send {} (no hosts key). If you send {hosts: []}, you may override behavior.
+    runBtn.addEventListener('click', async () => {
+      runBtn.disabled = true;
+      out.textContent = 'Running ansible ping...';
 
-     // Build a detailed output view
-     let parts = [];
-     parts.push(`Return code: ${data.returncode}`);
-     parts.push(`Success: ${data.success}`);
+      try {
+        const resp = await fetch('/ansible/ping', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          // IMPORTANT: send an empty object so the backend uses its default inventory/targets
+          body: JSON.stringify({})
+        });
 
-     if (data.play_summary) {
-       parts.push('\nPlay recap:');
-       for (const [host, stats] of Object.entries(data.play_summary)) {
-         parts.push(` - ${host}: ` + Object.entries(stats).map(kv => `${kv[0]}=${kv[1]}`).join(' '));
-       }
-     }
+        // Always read body as text first, then parse safely.
+        const raw = await resp.text();
+        let data;
+        try {
+          data = JSON.parse(raw);
+        } catch (e) {
+          out.textContent =
+            `Request failed: response was not JSON\n` +
+            `HTTP ${resp.status}\n\n` +
+            raw;
+          return;
+        }
 
-     if (data.stdout) {
-       parts.push('\nSTDOUT:\n' + data.stdout);
-     }
-     if (data.stderr) {
-       parts.push('\nSTDERR:\n' + data.stderr);
-     }
-     if (data.error) {
-       parts.push('\nERROR:\n' + data.error);
-     }
+        if (!resp.ok) {
+          out.textContent =
+            `Request failed: HTTP ${resp.status}\n\n` +
+            (data.error ? `Error: ${data.error}\n\n` : '') +
+            raw;
+          return;
+        }
 
-     out.textContent = parts.join('\n');
-    } catch (err) {
-     out.textContent = 'Request failed: ' + err.message;
-    }
-   });
+        // Build a detailed output view
+        const parts = [];
+        parts.push(`HTTP: ${resp.status}`);
+        parts.push(`Return code: ${data.returncode}`);
+        parts.push(`Success: ${data.success}`);
+
+        if (data.play_summary) {
+          parts.push('\nPlay recap:');
+          for (const [host, stats] of Object.entries(data.play_summary)) {
+            const statLine = Object.entries(stats).map(([k, v]) => `${k}=${v}`).join(' ');
+            parts.push(` - ${host}: ${statLine}`);
+          }
+        }
+
+        if (data.stdout) parts.push('\nSTDOUT:\n' + data.stdout);
+        if (data.stderr) parts.push('\nSTDERR:\n' + data.stderr);
+        if (data.error)  parts.push('\nERROR:\n' + data.error);
+
+        out.textContent = parts.join('\n');
+      } catch (err) {
+        out.textContent = 'Request failed: ' + (err && err.message ? err.message : String(err));
+      } finally {
+        runBtn.disabled = false;
+      }
+    });
   </script>
+</div>
 
 {% endblock %}
