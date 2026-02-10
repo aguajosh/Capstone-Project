@@ -68,6 +68,9 @@ spec:
             - name: ssh-key
               mountPath: /home/app/.ssh
               readOnly: true
+            - name: mainframe-key
+              mountPath: /home/app/.ssh/mainframe
+              readOnly: true
       volumes:
         - name: ssh-key
           secret:
@@ -75,6 +78,13 @@ spec:
             items:
               - key: ssh-privatekey
                 path: id_rsa
+            defaultMode: 0400
+        - name: mainframe-key
+          secret:
+            secretName: platform-api-mainframe-key
+            items:
+              - key: platform-api-mainframe-key
+                path: mainframe_id_rsa
             defaultMode: 0400
 ---
 apiVersion: v1
