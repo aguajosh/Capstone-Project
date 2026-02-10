@@ -56,6 +56,7 @@ spec:
                 secretKeyRef:
                   name: platformapi-secret
                   key: github_token
+                  optional: true
           resources:
             requests:
               memory: "128Mi"
