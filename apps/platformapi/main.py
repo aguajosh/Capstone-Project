@@ -54,6 +54,37 @@ def build_ansible_command(hosts: List[str]) -> List[str]:
     return cmd
 
 
+def parse_play_recap(output: str):
+    """Parse the PLAY RECAP section from ansible-playbook stdout into a dict.
+
+    Returns { host: {ok:int, changed:int, unreachable:int, failed:int, skipped:int, rescued:int, ignored:int}, ... }
+    """
+    summary = {}
+    if not output:
+        return summary
+    m = re.search(r"PLAY RECAP \*+\n(.*?)(?:\n\n|\Z)", output, re.DOTALL)
+    if not m:
+        return summary
+    body = m.group(1).strip()
+    for line in body.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        # Expect lines like: host : ok=1    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+        parts = line.split(":", 1)
+        if len(parts) != 2:
+            continue
+        host = parts[0].strip()
+        kvs = parts[1]
+        stats = {}
+        for kv in re.finditer(r"(\w+)=([0-9]+)", kvs):
+            key = kv.group(1)
+            val = int(kv.group(2))
+            stats[key] = val
+        summary[host] = stats
+    return summary
+
+
 @app.get("/", response_class=HTMLResponse)
 async def get_login(request: Request) -> HTMLResponse:
     """Render the login template."""
@@ -158,12 +189,14 @@ async def ansible_ping(request: Request):
         ]
 
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        play_summary = parse_play_recap(proc.stdout)
         return {
             "success": proc.returncode == 0,
             "returncode": proc.returncode,
             "stdout": proc.stdout,
             "stderr": proc.stderr,
             "cmd": " ".join(cmd),
+            "play_summary": play_summary,
         }
     except FileNotFoundError:
         return {"success": False, "error": "ansible-playbook binary not found in PATH. Install ansible in the container."}

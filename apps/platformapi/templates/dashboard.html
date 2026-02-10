@@ -48,11 +48,30 @@ h1 { margin-top:0 }
       body: JSON.stringify({ hosts: defaultHosts })
      });
      const data = await resp.json();
-     if (data.success) {
-      out.textContent = data.stdout || '(no stdout)';
-     } else {
-      out.textContent = data.error || data.stderr || JSON.stringify(data, null, 2);
+
+     // Build a detailed output view
+     let parts = [];
+     parts.push(`Return code: ${data.returncode}`);
+     parts.push(`Success: ${data.success}`);
+
+     if (data.play_summary) {
+       parts.push('\nPlay recap:');
+       for (const [host, stats] of Object.entries(data.play_summary)) {
+         parts.push(` - ${host}: ` + Object.entries(stats).map(kv => `${kv[0]}=${kv[1]}`).join(' '));
+       }
      }
+
+     if (data.stdout) {
+       parts.push('\nSTDOUT:\n' + data.stdout);
+     }
+     if (data.stderr) {
+       parts.push('\nSTDERR:\n' + data.stderr);
+     }
+     if (data.error) {
+       parts.push('\nERROR:\n' + data.error);
+     }
+
+     out.textContent = parts.join('\n');
     } catch (err) {
      out.textContent = 'Request failed: ' + err.message;
     }
