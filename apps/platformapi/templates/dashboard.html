@@ -1,0 +1,28 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<style>
+body, html { margin:0; padding:0; font-family:system-ui, -apple-system, BlinkMacSystemFont, sans-serif; background:#0b1020; color:#e6eef8 }
+.container { max-width:900px; margin:40px auto; padding:24px; background:rgba(255,255,255,0.03); border-radius:10px }
+h1 { margin-top:0 }
+.card { padding:12px; background:rgba(255,255,255,0.02); border-radius:8px; margin-bottom:12px }
+.code { background:#071027; padding:10px; border-radius:6px; font-family:monospace }
+</style>
+
+<div class="container">
+  <h1>{{ title or 'Platform API' }}</h1>
+  <div class="card">
+    <h3>Health</h3>
+    <p>Check service health: <a href="{{ health_url }}">{{ health_url }}</a></p>
+  </div>
+
+  <div class="card">
+    <h3>Available endpoints</h3>
+    <ul>
+      {% for ep in endpoints %}
+        <li><span class="code">{{ ep }}</span></li>
+      {% endfor %}
+    </ul>
+  </div>
+
+{% endblock %}

@@ -16,3 +16,5 @@ crash.*.log
 errored.tfstate
 .terraform.lock.hcl
 apps/legacy-batch/
+.venv/
+__pycache__/

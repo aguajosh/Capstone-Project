@@ -1,0 +1,153 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<style>
+body, html {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  overflow: hidden;
+  background: #111;
+  color: white;
+}
+
+.login-container {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0,0,0,0.8);
+  padding: 2rem;
+  border-radius: 12px;
+  min-width: 300px;
+  max-width: 400px;
+  text-align: center;
+  z-index: 2;
+}
+
+.login-container input {
+  width: 100%;
+  padding: 0.6rem;
+  margin-bottom: 1rem;
+  border-radius: 6px;
+  border: none;
+  font-size: 1rem;
+}
+
+.login-container button {
+  width: 100%;
+  padding: 0.7rem;
+  margin: 0 auto;
+  background: #00D8FF;
+  border: none;
+  border-radius: 6px;
+  color: #111;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.login-container button:hover {
+  background: #00B4CC;
+}
+
+.error {
+  background: #FF4D4D;
+  color: white;
+  padding: 0.5rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+}
+
+canvas {
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+}
+</style>
+
+<canvas id="cubes"></canvas>
+
+<div class="login-container">
+  <h2> Sign In</h2>
+
+  {% if error %}
+    <div class="error">{{ error }}</div>
+  {% endif %}
+
+  <form method="POST" action="{{ url_for('login') }}">
+    <input type="text" name="username" placeholder="Username" required autofocus>
+    <input type="password" name="password" placeholder="Password" required>
+    <button type="submit">Login</button>
+  </form>
+
+</div>
+
+<script>
+const canvas = document.getElementById('cubes');
+const ctx = canvas.getContext('2d');
+let width = canvas.width = window.innerWidth;
+let height = canvas.height = window.innerHeight;
+
+const cubeCount = 40;
+const cubes = [];
+
+function rand(min, max) {
+  return Math.random() * (max - min) + min;
+}
+
+class Cube {
+  constructor() {
+    this.reset();
+  }
+
+  reset() {
+    this.x = rand(0, width);
+    this.y = rand(0, height);
+    this.size = rand(10, 30);
+    this.vx = rand(-1, 1);
+    this.vy = rand(-1, 1);
+    this.color = `rgba(${rand(50,255)},${rand(50,255)},${rand(50,255)},0.7)`;
+  }
+
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    if(this.x < -this.size || this.x > width + this.size || this.y < -this.size || this.y > height + this.size){
+      this.reset();
+    }
+  }
+
+  draw() {
+    ctx.fillStyle = this.color;
+    ctx.fillRect(this.x, this.y, this.size, this.size);
+  }
+}
+
+for(let i=0;i<cubeCount;i++){
+  cubes.push(new Cube());
+}
+
+function animate() {
+  ctx.clearRect(0,0,width,height);
+  for(let cube of cubes){
+    cube.update();
+    cube.draw();
+  }
+  requestAnimationFrame(animate);
+}
+
+animate();
+
+window.addEventListener('resize', ()=>{
+  width = canvas.width = window.innerWidth;
+  height = canvas.height = window.innerHeight;
+});
+</script>
+
+
+
+{% endblock %}
