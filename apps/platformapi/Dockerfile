@@ -3,6 +3,7 @@ FROM python:3.11-slim
 # Install system dependencies for Ansible
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
+        openssh-client \
         sshpass \
         build-essential \
         libssl-dev \
