@@ -16,6 +16,8 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 INVENTORY_FILE = BASE_DIR / "ansible" / "inventory.yml"
 
+DEFAULT_TARGETS = ["18.144.29.14", "50.18.130.21"]
+
 
 def is_valid_ipv4(addr: str) -> bool:
     # Basic IPv4 validation
