@@ -13,9 +13,6 @@ app = FastAPI(title="Platform API")
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
-# Default target hosts (can be overridden by the UI request). Replace or extend as needed.
-DEFAULT_TARGETS = ["54.177.24.138", "50.18.84.244"]
-
 
 def is_valid_ipv4(addr: str) -> bool:
     # Basic IPv4 validation
@@ -32,27 +29,6 @@ def is_valid_ipv4(addr: str) -> bool:
     except ValueError:
         return False
     return True
-
-
-def build_ansible_command(hosts: List[str]) -> List[str]:
-    # Build an ad-hoc ansible ping command using the provided hosts list.
-    # Use a comma-trailing inventory spec so ansible treats it as a list of hosts.
-    inventory = ",".join(hosts) + ","
-    cmd = [
-        "ansible",
-        "-i",
-        inventory,
-        "all",
-        "-m",
-        "ping",
-        "-u",
-        "ec2-user",
-        "--private-key",
-        "/home/app/.ssh/id_rsa",
-        "-o",
-    ]
-    return cmd
-
 
 def parse_play_recap(output: str):
     """Parse the PLAY RECAP section from ansible-playbook stdout into a dict.
