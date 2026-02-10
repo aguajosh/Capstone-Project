@@ -27,8 +27,8 @@ prometheus:
           - job_name: "linux-nodes"
             static_configs:
               - targets:
-                  - 18.144.29.14:9100
-                  - 50.18.130.21:9100
+                  - 18.144.29.14:9100/metrics
+                  - 50.18.130.21:9100/metrics
 
     # Enable remote write receiver for Alloy/Tempo
     extraFlags:
