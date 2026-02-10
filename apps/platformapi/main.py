@@ -153,6 +153,8 @@ async def ansible_ping(request: Request):
             "ec2-user",
             "--private-key",
             "/home/app/.ssh/id_rsa",
+            "--ssh-extra-args",
+            "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
         ]
 
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
