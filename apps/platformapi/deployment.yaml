@@ -64,6 +64,18 @@ spec:
             limits:
               memory: "256Mi"
               cpu: "250m"
+          volumeMounts:
+            - name: ssh-key
+              mountPath: /home/app/.ssh
+              readOnly: true
+      volumes:
+        - name: ssh-key
+          secret:
+            secretName: platformapi-ssh-key
+            items:
+              - key: ssh-privatekey
+                path: id_rsa
+            defaultMode: 0400
 ---
 apiVersion: v1
 kind: Service

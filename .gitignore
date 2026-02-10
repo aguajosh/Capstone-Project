@@ -4,7 +4,7 @@
 errored.tfstate
 
 # Terraform (do not commit)
-apps/terraform/
+
 apps/S3-terraform/
 .terraform/
 *.tfstate
