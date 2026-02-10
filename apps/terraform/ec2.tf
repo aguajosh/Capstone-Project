@@ -41,7 +41,7 @@ data "aws_ami" "amazon_linux2" {
 
 resource "aws_instance" "platformapi" {
 	count                       = var.platform_instance_count
-	ami                         = data.aws_ami.amazon_linux_2.id
+	ami                         = data.aws_ami.amazon_linux2.id
 	instance_type               = "t3.micro"
 	subnet_id                   = element(module.vpc.public_subnets, count.index % length(module.vpc.public_subnets))
 	vpc_security_group_ids      = [aws_security_group.allow_all.id]
