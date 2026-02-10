@@ -16,7 +16,7 @@ grafana:
       datasources:
         - name: Prometheus
           type: prometheus
-          url: http://prometheus-server.monitoring.svc:80
+          url: http://prometheus-server.monitoring.svc.cluster.local:80
           access: proxy
           isDefault: true
         - name: Loki
