@@ -144,8 +144,22 @@ def _run_ansible_playbook(*, playbook: str, limit: Optional[str] = None) -> Dict
     if limit:
         cmd.extend(["--limit", limit])
 
+    # If the playbook lives under ansible/mainframe, tell Ansible to use that config.
+    # We use the container path /app/ansible/mainframe/ansible.cfg as requested.
+    env = None
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+        pb_path = Path(playbook)
+        mainframe_dir = BASE_DIR / "ansible" / "mainframe"
+        # Use string containment to avoid resolve() failures on missing files
+        if str(mainframe_dir) in str(pb_path.parent):
+            env = os.environ.copy()
+            env["ANSIBLE_CONFIG"] = "/app/ansible/mainframe/ansible.cfg"
+    except Exception:
+        # If anything goes wrong detecting, continue without special env.
+        env = None
+
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=180, env=env)
         return {
             "success": proc.returncode == 0,
             "returncode": proc.returncode,
