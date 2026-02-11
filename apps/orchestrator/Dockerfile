@@ -3,7 +3,6 @@ FROM python:3.11-slim
 # Install system dependencies for Ansible
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        openssh-client \
         sshpass \
         build-essential \
         libssl-dev \
@@ -21,7 +20,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Install Ansible
-RUN pip install --no-cache-dir ansible
+RUN pip install --no-cache-dir "ansible-core==2.15.3"
 
 # Install specific Ansible Galaxy collection
 RUN ansible-galaxy collection install ibm.ibm_zos_core:1.8.0
