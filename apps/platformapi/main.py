@@ -33,26 +33,33 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 INVENTORY_FILE = BASE_DIR / "ansible" / "inventory.yml"
 
-GRAFANA_URL = "http://your-grafana-url"
+# Phase 1 UI: fixed set of allowed actions (no free-form command execution)
+GRAFANA_URL = "http://ac3183f05b9224744bea7533000a4006-1765183457.us-west-1.elb.amazonaws.com/login"  
 
 ACTIONS: Dict[str, Dict[str, str]] = {
     "ec2_ping": {
         "label": "Ping EC2 targets",
-        "description": "Runs Ansible ping against EC2 targets.",
+        "description": "Runs Ansible ping against the EC2 targets in inventory.yml (group: platformapi).",
         "playbook": str(BASE_DIR / "ansible" / "ping.yml"),
         "limit": "platformapi",
     },
     "httpd_restart": {
         "label": "Restart HTTPD on EC2 targets",
-        "description": "Restart HTTPD service on EC2 targets.",
+        "description": "Runs Ansible playbook to restart HTTPD service on the EC2 targets in inventory.yml (group: platformapi).",
         "playbook": str(BASE_DIR / "ansible" / "httpdrestart.yml"),
         "limit": "platformapi",
     },
     "zos_ping": {
         "label": "Ping z/OS host",
-        "description": "Ping mainframe host.",
+        "description": "Runs IBM z/OS ping playbook against the mainframe host.",
         "playbook": str(BASE_DIR / "ansible" / "mainframe" / "mainframe_ping.yaml"),
         "limit": "mainframe",
+    },
+    "zos_cpu_jobs": {
+        "label": "Show z/OS CPU jobs",
+        "description": "Runs a z/OS operator command playbook to display address space CPU usage.",
+        "playbook": str(BASE_DIR / "ansible" / "mainframe" / "cpujobs.yaml"),
+        "limit": "zos",
     },
 }
 
