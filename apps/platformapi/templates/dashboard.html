@@ -29,76 +29,145 @@ button:disabled { opacity:.6; cursor:not-allowed }
   </div>
 
   <div class="card">
-    <h3>Ansible — Ping Targets</h3>
-    <button id="run-ansible">Run Ansible Ping</button>
-    <pre id="ansible-output"
-      style="white-space:pre-wrap; margin-top:12px; background:#071027; padding:12px; border-radius:6px; color:#cfe7ff"></pre>
+    <h3>Operator actions</h3>
+    <p>
+      Grafana: <a href="{{ grafana_url }}" target="_blank" rel="noreferrer">{{ grafana_url }}</a>
+    </p>
+    <div id="actions" style="display:grid; grid-template-columns:1fr; gap:10px">
+      {% for a in actions %}
+        <div style="display:flex; gap:10px; align-items:flex-start; justify-content:space-between">
+          <div>
+            <div style="font-weight:600">{{ a.label }}</div>
+            <div style="opacity:.85; font-size:14px">{{ a.description }}</div>
+          </div>
+          <button class="run-action" data-action="{{ a.name }}">Run</button>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Run history</h3>
+    <div style="overflow:auto">
+      <table style="width:100%; border-collapse:collapse; font-size:14px">
+        <thead>
+          <tr style="text-align:left; border-bottom:1px solid rgba(255,255,255,0.08)">
+            <th style="padding:8px">When</th>
+            <th style="padding:8px">Action</th>
+            <th style="padding:8px">Status</th>
+            <th style="padding:8px">Duration</th>
+          </tr>
+        </thead>
+        <tbody id="runs"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Selected run output</h3>
+    <pre id="run-output" style="white-space:pre-wrap; margin-top:12px; background:#071027; padding:12px; border-radius:6px; color:#cfe7ff"></pre>
   </div>
 
   <script>
-    const runBtn = document.getElementById('run-ansible');
-    const out = document.getElementById('ansible-output');
+    const runButtons = Array.from(document.querySelectorAll('.run-action'));
+    const runsBody = document.getElementById('runs');
+    const out = document.getElementById('run-output');
 
-    // If you want the API to use its own DEFAULT_TARGETS / inventory.yml,
-    // send {} (no hosts key). If you send {hosts: []}, you may override behavior.
-    runBtn.addEventListener('click', async () => {
-      runBtn.disabled = true;
-      out.textContent = 'Running ansible ping...';
+    function fmtWhen(ts) {
+      if (!ts) return '';
+      const d = new Date(ts * 1000);
+      return d.toLocaleString();
+    }
+
+    function fmtDuration(s) {
+      if (s === null || s === undefined) return '';
+      return `${s}s`;
+    }
+
+    function renderRunOutput(r) {
+      const parts = [];
+      parts.push(`Run: ${r.id}`);
+      parts.push(`Action: ${r.action} (${r.label || ''})`);
+      parts.push(`Status: ${r.status}`);
+      if (r.returncode !== null && r.returncode !== undefined) parts.push(`Return code: ${r.returncode}`);
+      if (r.duration_s !== null && r.duration_s !== undefined) parts.push(`Duration: ${r.duration_s}s`);
+      if (r.cmd) parts.push(`\nCMD:\n${r.cmd}`);
+
+      if (r.play_summary) {
+        parts.push('\nPlay recap:');
+        for (const [host, stats] of Object.entries(r.play_summary)) {
+          const statLine = Object.entries(stats).map(([k, v]) => `${k}=${v}`).join(' ');
+          parts.push(` - ${host}: ${statLine}`);
+        }
+      }
+
+      if (r.stdout) parts.push('\nSTDOUT:\n' + r.stdout);
+      if (r.stderr) parts.push('\nSTDERR:\n' + r.stderr);
+      if (r.error)  parts.push('\nERROR:\n' + r.error);
+      out.textContent = parts.join('\n');
+    }
+
+    async function refreshRuns(selectRunId = null) {
+      const resp = await fetch('/api/runs');
+      const data = await resp.json();
+      const runs = (data && data.runs) ? data.runs : [];
+
+      runsBody.innerHTML = '';
+      for (const r of runs) {
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid rgba(255,255,255,0.06)';
+        tr.style.cursor = 'pointer';
+        tr.innerHTML = `
+          <td style="padding:8px">${fmtWhen(r.started_at)}</td>
+          <td style="padding:8px"><span class="code">${r.action}</span></td>
+          <td style="padding:8px">${r.status}</td>
+          <td style="padding:8px">${fmtDuration(r.duration_s)}</td>
+        `;
+        tr.addEventListener('click', () => renderRunOutput(r));
+        runsBody.appendChild(tr);
+
+        if (selectRunId && r.id === selectRunId) {
+          renderRunOutput(r);
+        }
+      }
+
+      if (!selectRunId && runs.length) {
+        renderRunOutput(runs[0]);
+      }
+    }
+
+    async function runAction(action, btn) {
+      btn.disabled = true;
+      out.textContent = `Running ${action}...`;
 
       try {
-        const resp = await fetch('/ansible/ping', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          // IMPORTANT: send an empty object so the backend uses its default inventory/targets
-          body: JSON.stringify({})
+        const resp = await fetch(`/api/run/${encodeURIComponent(action)}`, {
+          method: 'POST'
         });
 
-        // Always read body as text first, then parse safely.
         const raw = await resp.text();
         let data;
-        try {
-          data = JSON.parse(raw);
-        } catch (e) {
-          out.textContent =
-            `Request failed: response was not JSON\n` +
-            `HTTP ${resp.status}\n\n` +
-            raw;
-          return;
-        }
+        try { data = JSON.parse(raw); } catch { data = null; }
 
         if (!resp.ok) {
-          out.textContent =
-            `Request failed: HTTP ${resp.status}\n\n` +
-            (data.error ? `Error: ${data.error}\n\n` : '') +
-            raw;
+          out.textContent = `HTTP ${resp.status}\n\n${raw}`;
+          await refreshRuns();
           return;
         }
 
-        // Build a detailed output view
-        const parts = [];
-        parts.push(`HTTP: ${resp.status}`);
-        parts.push(`Return code: ${data.returncode}`);
-        parts.push(`Success: ${data.success}`);
-
-        if (data.play_summary) {
-          parts.push('\nPlay recap:');
-          for (const [host, stats] of Object.entries(data.play_summary)) {
-            const statLine = Object.entries(stats).map(([k, v]) => `${k}=${v}`).join(' ');
-            parts.push(` - ${host}: ${statLine}`);
-          }
-        }
-
-        if (data.stdout) parts.push('\nSTDOUT:\n' + data.stdout);
-        if (data.stderr) parts.push('\nSTDERR:\n' + data.stderr);
-        if (data.error)  parts.push('\nERROR:\n' + data.error);
-
-        out.textContent = parts.join('\n');
-      } catch (err) {
-        out.textContent = 'Request failed: ' + (err && err.message ? err.message : String(err));
+        await refreshRuns(data && data.id ? data.id : null);
+      } catch (e) {
+        out.textContent = 'Request failed: ' + (e && e.message ? e.message : String(e));
       } finally {
-        runBtn.disabled = false;
+        btn.disabled = false;
       }
-    });
+    }
+
+    for (const btn of runButtons) {
+      btn.addEventListener('click', () => runAction(btn.dataset.action, btn));
+    }
+
+    refreshRuns();
   </script>
 </div>
 
