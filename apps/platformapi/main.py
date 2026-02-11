@@ -1,18 +1,15 @@
-from fastapi import FastAPI, Form, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 import subprocess
-import json
 import re
 from typing import Dict, Optional
-import tempfile
 import time
 import uuid
-import os
 from collections import deque
 
-# ---- Prometheus imports ----
+# ---- Prometheus ----
 from prometheus_client import (
     Counter,
     Histogram,
@@ -21,6 +18,14 @@ from prometheus_client import (
     CONTENT_TYPE_LATEST,
 )
 
+# ---- Scheduler ----
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.interval import IntervalTrigger
+
+# ============================================================
+# ------------------ APP INIT -------------------------------
+# ============================================================
+
 app = FastAPI(title="Platform API")
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -28,9 +33,7 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 INVENTORY_FILE = BASE_DIR / "ansible" / "inventory.yml"
 
-DEFAULT_TARGETS = ["18.144.29.14", "50.18.130.21"]
-
-GRAFANA_URL = "http://ac3183f05b9224744bea7533000a4006-1765183457.us-west-1.elb.amazonaws.com/login"
+GRAFANA_URL = "http://your-grafana-url"
 
 ACTIONS: Dict[str, Dict[str, str]] = {
     "ec2_ping": {
@@ -50,12 +53,6 @@ ACTIONS: Dict[str, Dict[str, str]] = {
         "description": "Ping mainframe host.",
         "playbook": str(BASE_DIR / "ansible" / "mainframe" / "mainframe_ping.yaml"),
         "limit": "mainframe",
-    },
-    "zos_cpu_jobs": {
-        "label": "Show z/OS CPU jobs",
-        "description": "Display address space CPU usage.",
-        "playbook": str(BASE_DIR / "ansible" / "mainframe" / "cpujobs.yaml"),
-        "limit": "zos",
     },
 }
 
@@ -110,11 +107,10 @@ async def prometheus_http_middleware(request: Request, call_next):
         duration = time.time() - start_time
         path = request.url.path
 
-        # Prevent high-cardinality labels
         if path.startswith("/api/run/"):
             path = "/api/run/{action}"
-        elif path.startswith("/api/runs/"):
-            path = "/api/runs/{id}"
+        elif path.startswith("/api/schedule/"):
+            path = "/api/schedule/{action}"
 
         status_code = response.status_code if response else 500
 
@@ -132,14 +128,6 @@ async def prometheus_http_middleware(request: Request, call_next):
 # ============================================================
 # --------------------- UTILITIES ----------------------------
 # ============================================================
-
-def is_valid_ipv4(addr: str) -> bool:
-    try:
-        parts = addr.split(".")
-        return len(parts) == 4 and all(0 <= int(p) <= 255 for p in parts)
-    except Exception:
-        return False
-
 
 def parse_play_recap(output: str):
     summary = {}
@@ -163,43 +151,6 @@ def parse_play_recap(output: str):
 
     return summary
 
-# ============================================================
-# --------------------- CORE ROUTES --------------------------
-# ============================================================
-
-@app.get("/")
-async def root(request: Request):
-    return RedirectResponse(url=request.url_for("app_home"), status_code=302)
-
-
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
-
-
-@app.get("/metrics")
-async def metrics():
-    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
-
-
-@app.get("/app", name="app_home", response_class=HTMLResponse)
-async def app_home(request: Request):
-    return templates.TemplateResponse(
-        "dashboard.html",
-        {
-            "request": request,
-            "title": "Platform API",
-            "grafana_url": GRAFANA_URL,
-            "actions": [
-                {"name": n, "label": m["label"], "description": m["description"]}
-                for n, m in ACTIONS.items()
-            ],
-        },
-    )
-
-# ============================================================
-# ------------------- ACTION EXECUTION -----------------------
-# ============================================================
 
 def _run_ansible_playbook(*, playbook: str, limit: Optional[str] = None):
     if not INVENTORY_FILE.exists():
@@ -222,12 +173,14 @@ def _run_ansible_playbook(*, playbook: str, limit: Optional[str] = None):
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+# ============================================================
+# ------------------ ACTION EXECUTION ------------------------
+# ============================================================
 
-@app.post("/api/run/{action}")
-async def api_run_action(action: str):
+def execute_action(action: str, scheduled: bool = False):
     meta = ACTIONS.get(action)
     if not meta:
-        raise HTTPException(status_code=404, detail="unknown action")
+        return None
 
     run_id = str(uuid.uuid4())
     started = time.time()
@@ -256,25 +209,112 @@ async def api_run_action(action: str):
         "action": action,
         "status": "success" if success else "failed",
         "duration_s": round(duration, 3),
+        "started_at": started,
+        "scheduled": scheduled,
         **result,
     }
 
     RUNS.appendleft(run_record)
-
     return run_record
 
+# ============================================================
+# --------------------- SCHEDULER ----------------------------
+# ============================================================
 
-@app.get("/api/actions")
-async def api_actions():
-    return {
-        "grafana_url": GRAFANA_URL,
-        "actions": [
-            {"name": n, "label": m["label"], "description": m["description"]}
-            for n, m in ACTIONS.items()
-        ],
-    }
+scheduler = BackgroundScheduler()
 
+@app.on_event("startup")
+def start_scheduler():
+    scheduler.start()
+
+    # Default: zos_ping every 10 minutes
+    scheduler.add_job(
+        func=execute_action,
+        trigger=IntervalTrigger(minutes=10),
+        id="zos_ping_interval",
+        replace_existing=True,
+        args=["zos_ping", True],
+        max_instances=1,
+    )
+
+@app.on_event("shutdown")
+def shutdown_scheduler():
+    scheduler.shutdown()
+
+# ============================================================
+# ------------------------ ROUTES ----------------------------
+# ============================================================
+
+@app.get("/")
+async def root(request: Request):
+    return RedirectResponse(url=request.url_for("app_home"), status_code=302)
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+@app.get("/metrics")
+async def metrics():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+@app.get("/app", name="app_home", response_class=HTMLResponse)
+async def app_home(request: Request):
+    return templates.TemplateResponse(
+        "dashboard.html",
+        {
+            "request": request,
+            "title": "Platform API",
+            "grafana_url": GRAFANA_URL,
+            "actions": [
+                {"name": n, "label": m["label"], "description": m["description"]}
+                for n, m in ACTIONS.items()
+            ],
+        },
+    )
+
+@app.post("/api/run/{action}")
+async def api_run_action(action: str):
+    result = execute_action(action, scheduled=False)
+    if not result:
+        raise HTTPException(status_code=404, detail="unknown action")
+    return result
 
 @app.get("/api/runs")
 async def api_runs():
     return {"runs": list(RUNS)}
+
+@app.get("/api/schedules")
+async def list_schedules():
+    return {
+        "jobs": [
+            {
+                "id": job.id,
+                "next_run_time": str(job.next_run_time),
+            }
+            for job in scheduler.get_jobs()
+        ]
+    }
+
+@app.post("/api/schedule/{action}")
+async def set_schedule(action: str, minutes: int):
+    if action not in ACTIONS:
+        raise HTTPException(status_code=404, detail="unknown action")
+
+    job_id = f"{action}_interval"
+
+    scheduler.add_job(
+        func=execute_action,
+        trigger=IntervalTrigger(minutes=minutes),
+        id=job_id,
+        replace_existing=True,
+        args=[action, True],
+        max_instances=1,
+    )
+
+    return {"status": "scheduled", "action": action, "minutes": minutes}
+
+@app.delete("/api/schedule/{action}")
+async def remove_schedule(action: str):
+    job_id = f"{action}_interval"
+    scheduler.remove_job(job_id)
+    return {"status": "removed", "action": action}

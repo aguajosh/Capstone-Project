@@ -3,42 +3,42 @@
 {% block content %}
 <style>
 body, html { margin:0; padding:0; font-family:system-ui, -apple-system, BlinkMacSystemFont, sans-serif; background:#0b1020; color:#e6eef8 }
-.container { max-width:900px; margin:40px auto; padding:24px; background:rgba(255,255,255,0.03); border-radius:10px }
+.container { max-width:1000px; margin:40px auto; padding:24px; background:rgba(255,255,255,0.03); border-radius:10px }
 h1 { margin-top:0 }
-.card { padding:12px; background:rgba(255,255,255,0.02); border-radius:8px; margin-bottom:12px }
-.code { background:#071027; padding:10px; border-radius:6px; font-family:monospace }
+.card { padding:16px; background:rgba(255,255,255,0.02); border-radius:8px; margin-bottom:16px }
+.code { background:#071027; padding:4px 8px; border-radius:6px; font-family:monospace }
 button { cursor:pointer; padding:8px 12px; border-radius:6px; border:0; background:#1b3a7a; color:#e6eef8 }
+button:hover { background:#254a99 }
 button:disabled { opacity:.6; cursor:not-allowed }
+input, select { padding:6px; border-radius:6px; border:1px solid rgba(255,255,255,0.1); background:#071027; color:#e6eef8 }
+table { width:100%; border-collapse:collapse }
+th, td { padding:8px }
+tr { border-bottom:1px solid rgba(255,255,255,0.06) }
+.badge { padding:2px 6px; border-radius:4px; font-size:12px }
+.badge.success { background:#1d6b3a }
+.badge.failed { background:#7a1d1d }
+.badge.scheduled { background:#6b4b1d }
 </style>
 
 <div class="container">
   <h1>{{ title or 'Platform API' }}</h1>
 
+  <!-- ACTIONS -->
   <div class="card">
-    <h3>Health</h3>
-    <p>Check service health: <a href="{{ health_url }}">{{ health_url }}</a></p>
-  </div>
-
-  <div class="card">
-    <h3>Available endpoints</h3>
-    <ul>
-      {% for ep in endpoints %}
-        <li><span class="code">{{ ep }}</span></li>
-      {% endfor %}
-    </ul>
-  </div>
-
-  <div class="card">
-    <h3>Operator actions</h3>
+    <h3>Operator Actions</h3>
     <p>
-      Grafana: <a href="{{ grafana_url }}" target="_blank" rel="noreferrer">{{ grafana_url }}</a>
+      Grafana:
+      <a href="{{ grafana_url }}" target="_blank" rel="noreferrer">
+        {{ grafana_url }}
+      </a>
     </p>
-    <div id="actions" style="display:grid; grid-template-columns:1fr; gap:10px">
+
+    <div style="display:grid; gap:12px;">
       {% for a in actions %}
-        <div style="display:flex; gap:10px; align-items:flex-start; justify-content:space-between">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
           <div>
             <div style="font-weight:600">{{ a.label }}</div>
-            <div style="opacity:.85; font-size:14px">{{ a.description }}</div>
+            <div style="opacity:.8; font-size:14px">{{ a.description }}</div>
           </div>
           <button class="run-action" data-action="{{ a.name }}">Run</button>
         </div>
@@ -46,12 +46,39 @@ button:disabled { opacity:.6; cursor:not-allowed }
     </div>
   </div>
 
+  <!-- SCHEDULER -->
   <div class="card">
-    <h3>Run history</h3>
+    <h3>Scheduler</h3>
+
+    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px;">
+      <label>Action:</label>
+      <select id="sched-action">
+        {% for a in actions %}
+          <option value="{{ a.name }}">{{ a.label }}</option>
+        {% endfor %}
+      </select>
+
+      <label>Every</label>
+      <input type="number" id="sched-minutes" value="10" min="1" style="width:80px">
+      <span>minutes</span>
+
+      <button id="sched-set">Set</button>
+      <button id="sched-remove">Remove</button>
+    </div>
+
+    <div>
+      <strong>Active schedules:</strong>
+      <ul id="sched-list" style="margin-top:8px;"></ul>
+    </div>
+  </div>
+
+  <!-- RUN HISTORY -->
+  <div class="card">
+    <h3>Run History</h3>
     <div style="overflow:auto">
-      <table style="width:100%; border-collapse:collapse; font-size:14px">
+      <table>
         <thead>
-          <tr style="text-align:left; border-bottom:1px solid rgba(255,255,255,0.08)">
+          <tr>
             <th style="padding:8px">When</th>
             <th style="padding:8px">Action</th>
             <th style="padding:8px">Status</th>
@@ -63,112 +90,153 @@ button:disabled { opacity:.6; cursor:not-allowed }
     </div>
   </div>
 
+  <!-- RUN OUTPUT -->
   <div class="card">
-    <h3>Selected run output</h3>
+    <h3>Selected Run Output</h3>
     <pre id="run-output" style="white-space:pre-wrap; margin-top:12px; background:#071027; padding:12px; border-radius:6px; color:#cfe7ff"></pre>
   </div>
-
-  <script>
-    const runButtons = Array.from(document.querySelectorAll('.run-action'));
-    const runsBody = document.getElementById('runs');
-    const out = document.getElementById('run-output');
-
-    function fmtWhen(ts) {
-      if (!ts) return '';
-      const d = new Date(ts * 1000);
-      return d.toLocaleString();
-    }
-
-    function fmtDuration(s) {
-      if (s === null || s === undefined) return '';
-      return `${s}s`;
-    }
-
-    function renderRunOutput(r) {
-      const parts = [];
-      parts.push(`Run: ${r.id}`);
-      parts.push(`Action: ${r.action} (${r.label || ''})`);
-      parts.push(`Status: ${r.status}`);
-      if (r.returncode !== null && r.returncode !== undefined) parts.push(`Return code: ${r.returncode}`);
-      if (r.duration_s !== null && r.duration_s !== undefined) parts.push(`Duration: ${r.duration_s}s`);
-      if (r.cmd) parts.push(`\nCMD:\n${r.cmd}`);
-
-      if (r.play_summary) {
-        parts.push('\nPlay recap:');
-        for (const [host, stats] of Object.entries(r.play_summary)) {
-          const statLine = Object.entries(stats).map(([k, v]) => `${k}=${v}`).join(' ');
-          parts.push(` - ${host}: ${statLine}`);
-        }
-      }
-
-      if (r.stdout) parts.push('\nSTDOUT:\n' + r.stdout);
-      if (r.stderr) parts.push('\nSTDERR:\n' + r.stderr);
-      if (r.error)  parts.push('\nERROR:\n' + r.error);
-      out.textContent = parts.join('\n');
-    }
-
-    async function refreshRuns(selectRunId = null) {
-      const resp = await fetch('/api/runs');
-      const data = await resp.json();
-      const runs = (data && data.runs) ? data.runs : [];
-
-      runsBody.innerHTML = '';
-      for (const r of runs) {
-        const tr = document.createElement('tr');
-        tr.style.borderBottom = '1px solid rgba(255,255,255,0.06)';
-        tr.style.cursor = 'pointer';
-        tr.innerHTML = `
-          <td style="padding:8px">${fmtWhen(r.started_at)}</td>
-          <td style="padding:8px"><span class="code">${r.action}</span></td>
-          <td style="padding:8px">${r.status}</td>
-          <td style="padding:8px">${fmtDuration(r.duration_s)}</td>
-        `;
-        tr.addEventListener('click', () => renderRunOutput(r));
-        runsBody.appendChild(tr);
-
-        if (selectRunId && r.id === selectRunId) {
-          renderRunOutput(r);
-        }
-      }
-
-      if (!selectRunId && runs.length) {
-        renderRunOutput(runs[0]);
-      }
-    }
-
-    async function runAction(action, btn) {
-      btn.disabled = true;
-      out.textContent = `Running ${action}...`;
-
-      try {
-        const resp = await fetch(`/api/run/${encodeURIComponent(action)}`, {
-          method: 'POST'
-        });
-
-        const raw = await resp.text();
-        let data;
-        try { data = JSON.parse(raw); } catch { data = null; }
-
-        if (!resp.ok) {
-          out.textContent = `HTTP ${resp.status}\n\n${raw}`;
-          await refreshRuns();
-          return;
-        }
-
-        await refreshRuns(data && data.id ? data.id : null);
-      } catch (e) {
-        out.textContent = 'Request failed: ' + (e && e.message ? e.message : String(e));
-      } finally {
-        btn.disabled = false;
-      }
-    }
-
-    for (const btn of runButtons) {
-      btn.addEventListener('click', () => runAction(btn.dataset.action, btn));
-    }
-
-    refreshRuns();
-  </script>
 </div>
+
+<script>
+const runButtons = Array.from(document.querySelectorAll('.run-action'));
+const runsBody = document.getElementById('runs');
+const out = document.getElementById('run-output');
+
+const schedList = document.getElementById('sched-list');
+const schedSetBtn = document.getElementById('sched-set');
+const schedRemoveBtn = document.getElementById('sched-remove');
+
+function fmtWhen(ts) {
+  if (!ts) return '';
+  const d = new Date(ts * 1000);
+  return d.toLocaleString();
+}
+
+function fmtDuration(s) {
+  if (s === null || s === undefined) return '';
+  return `${s}s`;
+}
+
+function renderRunOutput(r) {
+  const parts = [];
+  parts.push(`Run: ${r.id}`);
+  parts.push(`Action: ${r.action}`);
+  parts.push(`Status: ${r.status}`);
+  if (r.scheduled) parts.push(`Scheduled: Yes`);
+  if (r.returncode !== undefined) parts.push(`Return code: ${r.returncode}`);
+  if (r.duration_s !== undefined) parts.push(`Duration: ${r.duration_s}s`);
+  if (r.cmd) parts.push(`\nCMD:\n${r.cmd}`);
+
+  if (r.play_summary) {
+    parts.push('\nPlay recap:');
+    for (const [host, stats] of Object.entries(r.play_summary)) {
+      const statLine = Object.entries(stats).map(([k, v]) => `${k}=${v}`).join(' ');
+      parts.push(` - ${host}: ${statLine}`);
+    }
+  }
+
+  if (r.stdout) parts.push('\nSTDOUT:\n' + r.stdout);
+  if (r.stderr) parts.push('\nSTDERR:\n' + r.stderr);
+  if (r.error)  parts.push('\nERROR:\n' + r.error);
+
+  out.textContent = parts.join('\n');
+}
+
+async function refreshRuns(selectRunId = null) {
+  const resp = await fetch('/api/runs');
+  const data = await resp.json();
+  const runs = data.runs || [];
+
+  runsBody.innerHTML = '';
+
+  for (const r of runs) {
+    const tr = document.createElement('tr');
+    tr.style.cursor = 'pointer';
+
+    const badgeClass = r.status === 'success' ? 'success' : 'failed';
+
+    tr.innerHTML = `
+      <td>${fmtWhen(r.started_at)}</td>
+      <td><span class="code">${r.action}</span></td>
+      <td>
+        <span class="badge ${badgeClass}">${r.status}</span>
+        ${r.scheduled ? '<span class="badge scheduled">scheduled</span>' : ''}
+      </td>
+      <td>${fmtDuration(r.duration_s)}</td>
+    `;
+
+    tr.addEventListener('click', () => renderRunOutput(r));
+    runsBody.appendChild(tr);
+
+    if (selectRunId && r.id === selectRunId) {
+      renderRunOutput(r);
+    }
+  }
+
+  if (!selectRunId && runs.length) {
+    renderRunOutput(runs[0]);
+  }
+}
+
+async function runAction(action, btn) {
+  btn.disabled = true;
+  out.textContent = `Running ${action}...`;
+
+  try {
+    const resp = await fetch(`/api/run/${encodeURIComponent(action)}`, {
+      method: 'POST'
+    });
+
+    const data = await resp.json();
+    await refreshRuns(data.id);
+  } catch (e) {
+    out.textContent = 'Request failed: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+for (const btn of runButtons) {
+  btn.addEventListener('click', () => runAction(btn.dataset.action, btn));
+}
+
+async function refreshSchedules() {
+  const resp = await fetch('/api/schedules');
+  const data = await resp.json();
+  schedList.innerHTML = '';
+
+  for (const job of data.jobs || []) {
+    const li = document.createElement('li');
+    li.textContent = `${job.id} → next run: ${job.next_run_time}`;
+    schedList.appendChild(li);
+  }
+}
+
+schedSetBtn.addEventListener('click', async () => {
+  const action = document.getElementById('sched-action').value;
+  const minutes = document.getElementById('sched-minutes').value;
+
+  await fetch(`/api/schedule/${action}?minutes=${minutes}`, {
+    method: 'POST'
+  });
+
+  refreshSchedules();
+});
+
+schedRemoveBtn.addEventListener('click', async () => {
+  const action = document.getElementById('sched-action').value;
+
+  await fetch(`/api/schedule/${action}`, {
+    method: 'DELETE'
+  });
+
+  refreshSchedules();
+});
+
+refreshRuns();
+refreshSchedules();
+setInterval(refreshRuns, 10000);
+setInterval(refreshSchedules, 15000);
+</script>
 
 {% endblock %}
