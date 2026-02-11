@@ -1,0 +1,9 @@
+- name: Submit JCL and wait for completion
+  zos_job_submit:
+    src: "{{ src }}"
+    location: DATA_SET
+    wait: true
+    wait_time_s: 120
+    return_output: true
+  register: job_output
+  failed_when: "job_output.jobs[0].ret_code.code | int > acceptable_cond_code"
